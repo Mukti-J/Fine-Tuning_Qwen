@@ -18,7 +18,7 @@ lora_target_modules: "all-linear"
 
 # Dataset (Opsi A: validation split dari train file)
 datasets:
-  - path: /mnt/scratch/processed/auditor_train.jsonl
+  - path: root@2:/home/security-ft/code-security-ft/datasets/detection_tasks.jsonl
     type: chat_template
     chat_template: chatml
     field_messages: messages
@@ -47,8 +47,8 @@ save_steps: 200
 eval_strategy: steps
 eval_steps: 200
 save_total_limit: 3
-output_dir: /mnt/scratch/outputs/auditor
-logging_dir: /mnt/scratch/logs/auditor
+output_dir: root@2:/home/security-ft/code-security-ft/outputs/auditor
+logging_dir: root@2:/home/security-ft/code-security-ft/logs/auditor
 wandb_project: security-council
 wandb_run_name: auditor-lora-r64-rocm7
 deepspeed: null

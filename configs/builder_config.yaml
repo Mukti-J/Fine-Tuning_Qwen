@@ -19,14 +19,14 @@ lora_target_modules: "all-linear"
 
 # Dataset
 datasets:
-  - path: /mnt/scratch/processed/builder_train.jsonl
+  - path: root@2:/home/security-ft/code-security-ft/datasets/fixing_tasks.jsonl
     type: chat_template
     chat_template: chatml
     field_messages: messages
     message_property_mappings:
       role: role
       content: content
-  - path: /mnt/scratch/processed/builder_eval.jsonl
+  - path: root@2:/home/security-ft/code-security-ft/datasets/fixing_tasks.jsonl
     type: chat_template
     chat_template: chatml
     field_messages: messages
@@ -53,8 +53,8 @@ max_grad_norm: 1.0
 # Save & Log
 save_steps: 150
 save_total_limit: 3
-output_dir: /mnt/scratch/outputs/builder
-logging_dir: /mnt/scratch/logs/builder
+output_dir: root@2:/home/security-ft/code-security-ft/outputs/builder
+logging_dir: root@2:/home/security-ft/code-security-ft/logs/builder
 wandb_project: security-council
 wandb_run_name: builder-lora-r64-rocm7
 deepspeed: null
