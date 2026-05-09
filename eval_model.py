@@ -133,26 +133,28 @@ def evaluate(model, tokenizer, eval_data, batch_size=32):
         inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(model.device)
         
         with torch.no_grad():
+            # ✅ FIX: Hapus parameter attention_mask eksplisit, **inputs sudah cukup
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=64,
-                do_sample=False,
-                attention_mask=inputs["attention_mask"]
+                do_sample=False
             )
 
-        # Decode batch & compute metrics
-        for j, out in enumerate(outputs):
-            pred_text = tokenizer.decode(out, skip_special_tokens=True)[len(prompts[j]):]
-            pred_label = extract_label(pred_text)
-            true_label = true_labels[j]
+        for j in range(len(outputs)):
+            prompt_len = inputs["input_ids"][j].shape[0]
+            generated_ids = outputs[j][prompt_len:]
+            pred_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
             
-            total_tokens += (len(out) - len(inputs["input_ids"][j]))
+            total_tokens += len(generated_ids)
             results.append({
                 "prompt": prompts[j][:200],
                 "response": pred_text[:300],
-                "true_label": true_label,
-                "predicted_label": pred_label
+                "true_label": true_labels[j],
+                "predicted_label": extract_label(pred_text)
             })
+
+            true_label = true_labels[j]
+            pred_label = results[-1]["predicted_label"]
 
             if true_label is not None and pred_label is not None:
                 if pred_label and true_label: tp += 1
@@ -166,7 +168,7 @@ def evaluate(model, tokenizer, eval_data, batch_size=32):
         "accuracy": round((tp + tn) / (total_valid + 1e-10), 4),
         "precision": round(tp / (tp + fp + 1e-10), 4),
         "recall": round(tp / (tp + fn + 1e-10), 4),
-        "f1": round(2 * ((tp/(tp+fp+1e-10)) * (tp/(tp+fn+1e-10))) / ((tp/(tp+fp+1e-10)) + (tp/(tp+fn+1e-10)) + 1e-10), 4),
+        "f1": round(2 * (tp / (tp + fp + 1e-10)) * (tp / (tp + fn + 1e-10)) / ((tp / (tp + fp + 1e-10)) + (tp / (tp + fn + 1e-10)) + 1e-10), 4),
         "true_positive": tp, "false_positive": fp,
         "true_negative": tn, "false_negative": fn,
         "total_samples": len(eval_data),
