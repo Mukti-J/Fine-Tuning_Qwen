@@ -2,6 +2,7 @@
 """
 Evaluation Script for Fine-tuned Security Models
 Metrics: Accuracy, Precision, Recall, F1
+Sequential inference (stable) + clean table output + ROCm-friendly
 """
 import json
 import time
@@ -9,7 +10,6 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 from tqdm import tqdm
-
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -20,16 +20,13 @@ MODEL_PATHS = {
     "auditor": "/mnt/scratch/outputs/auditor",
     "builder": "/mnt/scratch/outputs/builder"
 }
-
 EVAL_DATA_PATHS = {
     "auditor": "/mnt/scratch/processed/auditor_eval.jsonl",
     "builder": "/mnt/scratch/processed/builder_eval.jsonl"
 }
-
 MODEL_PATH = MODEL_PATHS[args.model]
 EVAL_DATA = EVAL_DATA_PATHS[args.model]
 BASE_MODEL = "Qwen/Qwen2.5-Coder-14B-Instruct"
-
 OUTPUT_RESULTS = f"/mnt/scratch/outputs/{args.model}_eval_results.json"
 
 def load_model():
@@ -41,8 +38,13 @@ def load_model():
         trust_remote_code=True
     )
     model = PeftModel.from_pretrained(base_model, MODEL_PATH)
-    model.eval()
+    model.eval()  # ✅ Critical: set eval mode
+    
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
+    # ✅ ROCm/decoder-only fix: left-padding + pad token
+    tokenizer.padding_side = 'left'
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
 
 def load_eval_data():
@@ -50,153 +52,167 @@ def load_eval_data():
     data = []
     with open(EVAL_DATA, "r") as f:
         for line in f:
-            data.append(json.loads(line))
+            data.append(json.loads(line.strip()))
     return data
 
 def extract_label(response):
+    """Extract is_vulnerable label from JSON or fallback string parse"""
     try:
         result = json.loads(response)
-        return result.get("is_vulnerable", None)
+        val = result.get("is_vulnerable")
+        if isinstance(val, bool):
+            return val
     except:
         pass
-
-    if "false" in response.lower() or '"is_vulnerable": false' in response.lower():
+    # Fallback: string match
+    resp_lower = response.lower()
+    if '"is_vulnerable": false' in resp_lower or '"is_vulnerable":false' in resp_lower:
         return False
-    if "true" in response.lower() or '"is_vulnerable": true' in response.lower():
+    if '"is_vulnerable": true' in resp_lower or '"is_vulnerable":true' in resp_lower:
         return True
     return None
 
-def print_eval_summary(metrics, eval_runtime, total_tokens):
-    samples_sec = metrics["total_samples"] / eval_runtime if eval_runtime > 0 else 0
+def print_eval_table(metrics, eval_runtime, total_tokens, total_samples):
+    """Print clean, readable table output"""
+    samples_sec = total_samples / eval_runtime if eval_runtime > 0 else 0
     tokens_sec = total_tokens / eval_runtime if eval_runtime > 0 else 0
+    
+    print("\n" + "═"*60)
+    print(f"{'EVALUATION RESULTS':^60}")
+    print("═"*60)
+    print(f"  Model:       {MODEL_PATH}")
+    print(f"  Eval Data:   {EVAL_DATA}")
+    print(f"  Samples:     {total_samples}")
+    print("─"*60)
+    print(f"  {'Metric':<15} {'Value':>12}")
+    print("─"*60)
+    print(f"  {'Accuracy':<15} {metrics['accuracy']:>12.4f}")
+    print(f"  {'Precision':<15} {metrics['precision']:>12.4f}")
+    print(f"  {'Recall':<15} {metrics['recall']:>12.4f}")
+    print(f"  {'F1 Score':<15} {metrics['f1']:>12.4f}")
+    print("─"*60)
+    print(f"  {'Confusion Matrix':^28}")
+    print(f"  TP: {metrics['true_positive']:>4}  |  FP: {metrics['false_positive']:>4}")
+    print(f"  TN: {metrics['true_negative']:>4}  |  FN: {metrics['false_negative']:>4}")
+    print("─"*60)
+    print(f"  {'Runtime':<15} {eval_runtime:>11.2f}s")
+    print(f"  {'Samples/sec':<15} {samples_sec:>12.2f}")
+    print(f"  {'Tokens/sec':<15} {tokens_sec:>12.2f}")
+    print("═"*60 + "\n")
+    
+    return {"samples_per_sec": round(samples_sec, 2), "tokens_per_sec": round(tokens_sec, 2)}
 
-    bar_len = 50
-    print()
-    print(f"{'='*bar_len}")
-    print(f"{'EVALUATION RESULTS':^{bar_len}}")
-    print(f"{'='*bar_len}")
-    print()
-    print(f"  {'Model':<25} {MODEL_PATH}")
-    print(f"  {'Eval Data':<25} {EVAL_DATA}")
-    print()
-    print(f"{'-'*bar_len}")
-    print(f"  {'Metric':<20} {'Value':>12}")
-    print(f"{'-'*bar_len}")
-    print(f"  {'Accuracy':<20} {metrics['accuracy']:>12.4f}")
-    print(f"  {'Precision':<20} {metrics['precision']:>12.4f}")
-    print(f"  {'Recall':<20} {metrics['recall']:>12.4f}")
-    print(f"  {'F1 Score':<20} {metrics['f1']:>12.4f}")
-    print(f"{'-'*bar_len}")
-    print()
-    print(f"  {'Confusion Matrix':^}")
-    print(f"  {'TP (True Positive):':<25} {metrics['true_positive']:>5}")
-    print(f"  {'FP (False Positive):':<25} {metrics['false_positive']:>5}")
-    print(f"  {'TN (True Negative):':<25} {metrics['true_negative']:>5}")
-    print(f"  {'FN (False Negative):':<25} {metrics['false_negative']:>5}")
-    print()
-    print(f"{'-'*bar_len}")
-    print(f"  {'Total Samples':<20} {metrics['total_samples']:>12}")
-    print(f"  {'Total Tokens':<20} {total_tokens:>12,}")
-    print(f"  {'Eval Runtime':<20} {eval_runtime:>11.2f}s")
-    print(f"  {'Samples/sec':<20} {samples_sec:>12.2f}")
-    print(f"  {'Tokens/sec':<20} {tokens_sec:>12.2f}")
-    print(f"{'='*bar_len}")
-    print()
-
-    return {
-        "samples_per_sec": round(samples_sec, 2),
-        "tokens_per_sec": round(tokens_sec, 2)
-    }
-
-def evaluate(model, tokenizer, eval_data, batch_size=32):
-    print(f"Evaluating {len(eval_data)} samples (batch_size={batch_size})...")
-
-    tp, fp, tn, fn = 0, 0, 0, 0
+def evaluate(model, tokenizer, eval_data):
+    print(f"Evaluating {len(eval_data)} samples (sequential)...\n")
+    
+    tp = fp = tn = fn = 0
     results = []
     total_tokens = 0
     eval_start = time.time()
 
-    for i in tqdm(range(0, len(eval_data), batch_size)):
-        batch = eval_data[i:i+batch_size]
-        prompts = []
-        true_labels = []
+    for idx, item in enumerate(tqdm(eval_data, desc="Inference")):
+        messages = item["messages"]
+        prompt = tokenizer.apply_chat_template(
+            [m for m in messages if m["role"] != "assistant"],
+            tokenize=False,
+            add_generation_prompt=True
+        )
         
-        for item in batch:
-            messages = item["messages"]
-            prompt = tokenizer.apply_chat_template(
-                [m for m in messages if m["role"] != "assistant"],
-                tokenize=False, add_generation_prompt=True
-            )
-            prompts.append(prompt)
-            true_labels.append(extract_label(messages[-1]["content"]))
-
-        inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(model.device)
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
         
         with torch.no_grad():
-            # ✅ FIX: Hapus parameter attention_mask eksplisit, **inputs sudah cukup
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=64,
-                do_sample=False
+                max_new_tokens=256,
+                do_sample=False,  # ✅ greedy decoding, no temperature needed
+                pad_token_id=tokenizer.pad_token_id
             )
-
-        for j in range(len(outputs)):
-            prompt_len = inputs["input_ids"][j].shape[0]
-            generated_ids = outputs[j][prompt_len:]
-            pred_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
-            
-            total_tokens += len(generated_ids)
-            results.append({
-                "prompt": prompts[j][:200],
-                "response": pred_text[:300],
-                "true_label": true_labels[j],
-                "predicted_label": extract_label(pred_text)
-            })
-
-            true_label = true_labels[j]
-            pred_label = results[-1]["predicted_label"]
-
-            if true_label is not None and pred_label is not None:
-                if pred_label and true_label: tp += 1
-                elif pred_label and not true_label: fp += 1
-                elif not pred_label and not true_label: tn += 1
-                elif not pred_label and true_label: fn += 1
+        
+        # Decode: strip prompt, get only generated text
+        generated_ids = outputs[0][inputs["input_ids"].shape[1]:]
+        response = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+        total_tokens += len(generated_ids)
+        
+        # Extract labels
+        true_label = extract_label(messages[-1]["content"])
+        pred_label = extract_label(response)
+        
+        results.append({
+            "idx": idx,
+            "prompt_preview": messages[1]["content"][:150] + "..." if len(messages) > 1 else "",
+            "response_preview": response[:200] + "..." if len(response) > 200 else response,
+            "true_label": true_label,
+            "predicted_label": pred_label,
+            "parsed_ok": pred_label is not None
+        })
+        
+        # Update confusion matrix
+        if true_label is not None and pred_label is not None:
+            if pred_label and true_label: tp += 1
+            elif pred_label and not true_label: fp += 1
+            elif not pred_label and not true_label: tn += 1
+            elif not pred_label and true_label: fn += 1
+        
+        # ✅ ROCm memory cleanup every 100 samples
+        if (idx + 1) % 100 == 0:
+            if hasattr(torch, 'hip'):
+                torch.hip.empty_cache()
+            elif hasattr(torch, 'cuda'):
+                torch.cuda.empty_cache()
 
     eval_runtime = time.time() - eval_start
+    
+    # Compute metrics (safe division)
     total_valid = tp + tn + fp + fn
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    
     metrics = {
-        "accuracy": round((tp + tn) / (total_valid + 1e-10), 4),
-        "precision": round(tp / (tp + fp + 1e-10), 4),
-        "recall": round(tp / (tp + fn + 1e-10), 4),
-        "f1": round(2 * (tp / (tp + fp + 1e-10)) * (tp / (tp + fn + 1e-10)) / ((tp / (tp + fp + 1e-10)) + (tp / (tp + fn + 1e-10)) + 1e-10), 4),
-        "true_positive": tp, "false_positive": fp,
-        "true_negative": tn, "false_negative": fn,
+        "accuracy": round((tp + tn) / total_valid, 4) if total_valid > 0 else 0.0,
+        "precision": round(precision, 4),
+        "recall": round(recall, 4),
+        "f1": round(f1, 4),
+        "true_positive": tp,
+        "false_positive": fp,
+        "true_negative": tn,
+        "false_negative": fn,
         "total_samples": len(eval_data),
-        "total_tokens": total_tokens,
-        "eval_runtime": round(eval_runtime, 2)
+        "parse_success_rate": round(sum(1 for r in results if r["parsed_ok"]) / len(results), 4)
     }
-    return metrics, results
+    
+    return metrics, results, eval_runtime, total_tokens
 
 def main():
     model, tokenizer = load_model()
-
     eval_data = load_eval_data()
-    metrics, results = evaluate(model, tokenizer, eval_data)
-
-    speed_info = print_eval_summary(metrics, metrics["eval_runtime"], metrics["total_tokens"])
-
+    
+    metrics, results, runtime, total_tokens = evaluate(model, tokenizer, eval_data)
+    speed_info = print_eval_table(metrics, runtime, total_tokens, len(eval_data))
+    
+    # Save full report
     output = {
         "model_path": MODEL_PATH,
         "eval_data": EVAL_DATA,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "metrics": metrics,
-        "performance": speed_info,
-        "sample_results": results[:10]
+        "performance": {
+            "eval_runtime_sec": round(runtime, 2),
+            **speed_info
+        },
+        "sample_results": results[:10]  # First 10 for debugging
     }
-
-    with open(OUTPUT_RESULTS, "w") as f:
+    
+    with open(OUTPUT_RESULTS, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
-
-    print(f"Results saved to {OUTPUT_RESULTS}")
+    
+    print(f"✅ Results saved: {OUTPUT_RESULTS}")
+    
+    # ✅ Quick pass/fail hint
+    if metrics["f1"] >= 0.85 and metrics["parse_success_rate"] >= 0.92:
+        print("🎯 Model meets deployment thresholds → Ready for merge & deploy")
+    else:
+        print("⚠️  Model below thresholds → Review training or data")
 
 if __name__ == "__main__":
-    main()  
+    main()
