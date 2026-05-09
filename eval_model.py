@@ -14,6 +14,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", choices=["auditor", "builder"], required=True)
+parser.add_argument("--batch_size", type=int, default=8, help="Batch size for inference (default: 8)")
 args = parser.parse_args()
 
 MODEL_PATHS = {
@@ -103,14 +104,13 @@ def print_eval_table(metrics, eval_runtime, total_tokens, total_samples):
     return {"samples_per_sec": round(samples_sec, 2), "tokens_per_sec": round(tokens_sec, 2)}
 
 def evaluate(model, tokenizer, eval_data):
-    print(f"Evaluating {len(eval_data)} samples (sequential, optimized)...\n")
+    batch_size = args.batch_size
+    print(f"Evaluating {len(eval_data)} samples in batches of {batch_size}...\n")
     
-    # ✅ Optimasi 1: Set generation config sekali di awal
-    model.generation_config.max_new_tokens = 64  # Cukup untuk JSON singkat
+    model.generation_config.max_new_tokens = 64
     model.generation_config.do_sample = False
     model.generation_config.pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token else tokenizer.eos_token_id
     
-    # ✅ Optimasi 2: Pastikan model di GPU + eval mode
     model.eval()
     if hasattr(torch, 'hip'):
         torch.hip.empty_cache()
@@ -119,56 +119,57 @@ def evaluate(model, tokenizer, eval_data):
     results = []
     total_tokens = 0
     eval_start = time.time()
-
-    for idx, item in enumerate(tqdm(eval_data, desc="Inference")):
-        messages = item["messages"]
-        prompt = tokenizer.apply_chat_template(
-            [m for m in messages if m["role"] != "assistant"],
-            tokenize=False,
-            add_generation_prompt=True
-        )
+    
+    num_batches = (len(eval_data) + batch_size - 1) // batch_size
+    
+    for batch_idx, batch_start in enumerate(tqdm(range(0, len(eval_data), batch_size), desc="Batch", total=num_batches)):
+        batch_data = eval_data[batch_start : batch_start + batch_size]
         
-        # ✅ Optimasi 3: Tokenize + move to device sekali
-        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        prompts = [
+            tokenizer.apply_chat_template(
+                [m for m in item["messages"] if m["role"] != "assistant"],
+                tokenize=False,
+                add_generation_prompt=True
+            )
+            for item in batch_data
+        ]
+        
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
         
         with torch.no_grad():
-            # ✅ Optimasi 4: Hapus param invalid, pakai generation_config
             outputs = model.generate(
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
-                # ❌ HAPUS: temperature=0.1, top_p=..., top_k=... (invalid saat do_sample=False)
             )
         
-        # Decode hanya generated tokens
-        generated_ids = outputs[0][inputs["input_ids"].shape[1]:]
-        response = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
-        total_tokens += len(generated_ids)
+        for i, output in enumerate(outputs):
+            idx = batch_start + i
+            item = batch_data[i]
+            generated_ids = output[inputs["input_ids"].shape[1]:]
+            response = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+            total_tokens += len(generated_ids)
+            
+            true_label = extract_label(item["messages"][-1]["content"])
+            pred_label = extract_label(response)
+            
+            results.append({
+                "idx": idx,
+                "prompt_preview": item["messages"][1]["content"][:150] + "..." if len(item["messages"]) > 1 else "",
+                "response_preview": response[:200] + "..." if len(response) > 200 else response,
+                "true_label": true_label,
+                "predicted_label": pred_label,
+                "parsed_ok": pred_label is not None
+            })
+            
+            if true_label is not None and pred_label is not None:
+                if pred_label and true_label: tp += 1
+                elif pred_label and not true_label: fp += 1
+                elif not pred_label and not true_label: tn += 1
+                elif not pred_label and true_label: fn += 1
         
-        # Extract labels
-        true_label = extract_label(messages[-1]["content"])
-        pred_label = extract_label(response)
-        
-        results.append({
-            "idx": idx,
-            "prompt_preview": messages[1]["content"][:150] + "..." if len(messages) > 1 else "",
-            "response_preview": response[:200] + "..." if len(response) > 200 else response,
-            "true_label": true_label,
-            "predicted_label": pred_label,
-            "parsed_ok": pred_label is not None
-        })
-        
-        # Update confusion matrix
-        if true_label is not None and pred_label is not None:
-            if pred_label and true_label: tp += 1
-            elif pred_label and not true_label: fp += 1
-            elif not pred_label and not true_label: tn += 1
-            elif not pred_label and true_label: fn += 1
-        
-        # ✅ Optimasi 5: Clear cache tiap 200 samples (bukan tiap iterasi)
-        if (idx + 1) % 200 == 0 and hasattr(torch, 'hip'):
+        if (batch_idx + 1) % 25 == 0 and hasattr(torch, 'hip'):
             torch.hip.empty_cache()
-
-    # ✅ Optimasi 6: Sync sekali di akhir
+    
     if hasattr(torch, 'hip'):
         torch.hip.synchronize()
     
