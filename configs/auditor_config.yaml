@@ -1,0 +1,54 @@
+base_model: Qwen/Qwen2.5-Coder-14B-Instruct
+model_type: AutoModelForCausalLM
+tokenizer_type: AutoTokenizer
+trust_remote_code: true
+
+# ROCm 7.0 Precision & Attention
+bf16: true
+fp16: false
+attn_implementation: sdpa  # ✅ Fixed: deprecated flash_attention
+gradient_checkpointing: true
+
+# LoRA
+adapter: lora
+lora_r: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target_modules: "all-linear"
+
+# Dataset (Opsi A: validation split dari train file)
+datasets:
+  - path: /mnt/scratch/processed/auditor_train.jsonl
+    type: chat_template
+    chat_template: chatml
+    field_messages: messages
+    message_property_mappings:
+      role: role
+      content: content
+
+val_set_size: 0.05
+
+# Training
+sequence_len: 4096
+sample_packing: true
+pad_to_sequence_len: true
+micro_batch_size: 6
+gradient_accumulation_steps: 6
+num_epochs: 3
+learning_rate: 2e-4
+lr_scheduler: cosine
+warmup_ratio: 0.05
+weight_decay: 0.01
+optimizer: adamw_torch  # ✅ Fixed: no bitsandbytes dependency
+max_grad_norm: 1.0
+
+# Save & Log
+save_steps: 200
+eval_strategy: steps
+eval_steps: 200
+save_total_limit: 3
+output_dir: /mnt/scratch/outputs/auditor
+logging_dir: /mnt/scratch/logs/auditor
+wandb_project: security-council
+wandb_run_name: auditor-lora-r64-rocm7
+deepspeed: null

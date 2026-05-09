@@ -1,0 +1,34 @@
+base_model: Qwen/Qwen2.5-Coder-14B-Instruct
+model_type: AutoModelForCausalLM
+tokenizer_type: AutoTokenizer
+trust_remote_code: true
+
+# ROCm 7.0 Precision & Attention
+bf16: true
+fp16: false
+attn_implementation: sdpa
+gradient_checkpointing: true
+
+# LoRA
+adapter: lora
+lora_r: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target_modules: "all-linear"
+
+# Dataset (file eval terpisah → val_set_size HARUS 0)
+datasets:
+  - path: /mnt/scratch/processed/auditor_train.jsonl
+    type: chatml
+  - path: /mnt/scratch/processed/auditor_eval.jsonl
+    type: chatml
+val_set_size: 0.0
+
+# Training
+sequence_len: 4096
+sample_packing: true
+pad_to_sequence_len: true
+micro_batch_size: 6
+gradient_accumulation_steps: 6
+num_epochs: 3
+learning_rate: 2e-4

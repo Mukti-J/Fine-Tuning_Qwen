@@ -1,0 +1,25 @@
+# Mengabaikan environment Python
+venv/
+env/
+.env
+
+# Mengabaikan file model dan checkpoint
+*.pt
+*.pth
+*.bin
+*.safetensors
+checkpoint-*/
+models/
+runs/
+
+# Mengabaikan dataset
+*.csv
+*.json
+*.jsonl
+*.txt
+dataset/
+data/
+
+# Mengabaikan cache
+__pycache__/
+*.pyc
