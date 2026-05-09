@@ -103,7 +103,17 @@ def print_eval_table(metrics, eval_runtime, total_tokens, total_samples):
     return {"samples_per_sec": round(samples_sec, 2), "tokens_per_sec": round(tokens_sec, 2)}
 
 def evaluate(model, tokenizer, eval_data):
-    print(f"Evaluating {len(eval_data)} samples (sequential)...\n")
+    print(f"Evaluating {len(eval_data)} samples (sequential, optimized)...\n")
+    
+    # ✅ Optimasi 1: Set generation config sekali di awal
+    model.generation_config.max_new_tokens = 64  # Cukup untuk JSON singkat
+    model.generation_config.do_sample = False
+    model.generation_config.pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token else tokenizer.eos_token_id
+    
+    # ✅ Optimasi 2: Pastikan model di GPU + eval mode
+    model.eval()
+    if hasattr(torch, 'hip'):
+        torch.hip.empty_cache()
     
     tp = fp = tn = fn = 0
     results = []
@@ -118,17 +128,18 @@ def evaluate(model, tokenizer, eval_data):
             add_generation_prompt=True
         )
         
+        # ✅ Optimasi 3: Tokenize + move to device sekali
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
         
         with torch.no_grad():
+            # ✅ Optimasi 4: Hapus param invalid, pakai generation_config
             outputs = model.generate(
-                **inputs,
-                max_new_tokens=256,
-                do_sample=False,  # ✅ greedy decoding, no temperature needed
-                pad_token_id=tokenizer.pad_token_id
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                # ❌ HAPUS: temperature=0.1, top_p=..., top_k=... (invalid saat do_sample=False)
             )
         
-        # Decode: strip prompt, get only generated text
+        # Decode hanya generated tokens
         generated_ids = outputs[0][inputs["input_ids"].shape[1]:]
         response = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
         total_tokens += len(generated_ids)
@@ -153,16 +164,17 @@ def evaluate(model, tokenizer, eval_data):
             elif not pred_label and not true_label: tn += 1
             elif not pred_label and true_label: fn += 1
         
-        # ✅ ROCm memory cleanup every 100 samples
-        if (idx + 1) % 100 == 0:
-            if hasattr(torch, 'hip'):
-                torch.hip.empty_cache()
-            elif hasattr(torch, 'cuda'):
-                torch.cuda.empty_cache()
+        # ✅ Optimasi 5: Clear cache tiap 200 samples (bukan tiap iterasi)
+        if (idx + 1) % 200 == 0 and hasattr(torch, 'hip'):
+            torch.hip.empty_cache()
 
+    # ✅ Optimasi 6: Sync sekali di akhir
+    if hasattr(torch, 'hip'):
+        torch.hip.synchronize()
+    
     eval_runtime = time.time() - eval_start
     
-    # Compute metrics (safe division)
+    # Compute metrics
     total_valid = tp + tn + fp + fn
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
