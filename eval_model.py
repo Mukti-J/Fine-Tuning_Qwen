@@ -108,85 +108,71 @@ def print_eval_summary(metrics, eval_runtime, total_tokens):
         "tokens_per_sec": round(tokens_sec, 2)
     }
 
-def evaluate(model, tokenizer, eval_data):
-    print(f"Evaluating {len(eval_data)} samples...")
+def evaluate(model, tokenizer, eval_data, batch_size=32):
+    print(f"Evaluating {len(eval_data)} samples (batch_size={batch_size})...")
 
-    true_positive = 0
-    false_positive = 0
-    true_negative = 0
-    false_negative = 0
-
+    tp, fp, tn, fn = 0, 0, 0, 0
     results = []
     total_tokens = 0
-
     eval_start = time.time()
 
-    for item in tqdm(eval_data):
-        messages = item["messages"]
+    for i in tqdm(range(0, len(eval_data), batch_size)):
+        batch = eval_data[i:i+batch_size]
+        prompts = []
+        true_labels = []
+        
+        for item in batch:
+            messages = item["messages"]
+            prompt = tokenizer.apply_chat_template(
+                [m for m in messages if m["role"] != "assistant"],
+                tokenize=False, add_generation_prompt=True
+            )
+            prompts.append(prompt)
+            true_labels.append(extract_label(messages[-1]["content"]))
 
-        prompt = tokenizer.apply_chat_template(
-            [m for m in messages if m["role"] != "assistant"],
-            tokenize=False,
-            add_generation_prompt=True
-        )
-
-        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
+        inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(model.device)
+        
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=64,
-                temperature=0.1,
-                do_sample=False
+                do_sample=False,
+                attention_mask=inputs["attention_mask"]
             )
 
-        total_tokens += outputs.shape[1] - inputs.input_ids.shape[1]
+        # Decode batch & compute metrics
+        for j, out in enumerate(outputs):
+            pred_text = tokenizer.decode(out, skip_special_tokens=True)[len(prompts[j]):]
+            pred_label = extract_label(pred_text)
+            true_label = true_labels[j]
+            
+            total_tokens += (len(out) - len(inputs["input_ids"][j]))
+            results.append({
+                "prompt": prompts[j][:200],
+                "response": pred_text[:300],
+                "true_label": true_label,
+                "predicted_label": pred_label
+            })
 
-        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        response = response[len(prompt):]
-
-        true_label = messages[-1]["content"]
-        true_label = extract_label(true_label)
-        pred_label = extract_label(response)
-
-        results.append({
-            "prompt": messages[1]["content"][:200],
-            "response": response[:300],
-            "true_label": true_label,
-            "predicted_label": pred_label
-        })
-
-        if true_label is not None and pred_label is not None:
-            if pred_label == True and true_label == True:
-                true_positive += 1
-            elif pred_label == True and true_label == False:
-                false_positive += 1
-            elif pred_label == False and true_label == False:
-                true_negative += 1
-            elif pred_label == False and true_label == True:
-                false_negative += 1
+            if true_label is not None and pred_label is not None:
+                if pred_label and true_label: tp += 1
+                elif pred_label and not true_label: fp += 1
+                elif not pred_label and not true_label: tn += 1
+                elif not pred_label and true_label: fn += 1
 
     eval_runtime = time.time() - eval_start
-
-    accuracy = (true_positive + true_negative) / (true_positive + true_negative + false_positive + false_negative + 1e-10)
-    precision = true_positive / (true_positive + false_positive + 1e-10)
-    recall = true_positive / (true_positive + false_negative + 1e-10)
-    f1 = 2 * (precision * recall) / (precision + recall + 1e-10)
-
+    total_valid = tp + tn + fp + fn
     metrics = {
-        "accuracy": round(accuracy, 4),
-        "precision": round(precision, 4),
-        "recall": round(recall, 4),
-        "f1": round(f1, 4),
-        "true_positive": true_positive,
-        "false_positive": false_positive,
-        "true_negative": true_negative,
-        "false_negative": false_negative,
+        "accuracy": round((tp + tn) / (total_valid + 1e-10), 4),
+        "precision": round(tp / (tp + fp + 1e-10), 4),
+        "recall": round(tp / (tp + fn + 1e-10), 4),
+        "f1": round(2 * ((tp/(tp+fp+1e-10)) * (tp/(tp+fn+1e-10))) / ((tp/(tp+fp+1e-10)) + (tp/(tp+fn+1e-10)) + 1e-10), 4),
+        "true_positive": tp, "false_positive": fp,
+        "true_negative": tn, "false_negative": fn,
         "total_samples": len(eval_data),
         "total_tokens": total_tokens,
         "eval_runtime": round(eval_runtime, 2)
     }
-
     return metrics, results
 
 def main():
@@ -211,4 +197,4 @@ def main():
     print(f"Results saved to {OUTPUT_RESULTS}")
 
 if __name__ == "__main__":
-    main()
+    main()  
