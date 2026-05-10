@@ -1,4 +1,3 @@
-# 📄 README.md untuk Repo: `security-builder-14b`
 ---
 license: apache-2.0
 base_model: Qwen/Qwen2.5-Coder-14B-Instruct
