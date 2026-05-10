@@ -7,11 +7,11 @@ from typing import List, Optional, Literal
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # ─── ROCm & HF Env (Wajib) ────────────────────────────────────────────────
-os.environ["HSA_OVERRIDE_GFX_VERSION"] = "11.0.0"
+os.environ["HSA_OVERRIDE_GFX_VERSION"] = "9.4.2"   # ← FIX utama
 os.environ["PYTORCH_HIP_ALLOC_CONF"] = "expandable_segments:False"
 os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
-os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+os.environ["ROCR_VISIBLE_DEVICES"] = "0"
+os.environ["HIP_VISIBLE_DEVICES"] = "0"
 
 app = FastAPI(docs_url=None, redoc_url=None)
 model = None
