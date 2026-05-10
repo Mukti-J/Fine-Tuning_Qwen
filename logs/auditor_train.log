@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/axolotl/cli/train.py", line 14, in <module>
+    from axolotl.cli.config import load_cfg
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/axolotl/cli/config.py", line 20, in <module>
+    from axolotl.utils.config import (
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/axolotl/utils/config/__init__.py", line 9, in <module>
+    from transformers.utils.import_utils import (
+ImportError: cannot import name 'is_torch_greater_or_equal' from 'transformers.utils.import_utils' (/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/transformers/utils/import_utils.py). Did you mean: 'is_flash_attn_greater_or_equal'?

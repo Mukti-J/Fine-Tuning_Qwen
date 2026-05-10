@@ -42,4 +42,5 @@ wandb_project: security-council
 wandb_run_name: auditor-lora-r64-rocm7
 deepspeed: null
 merge_lora: true
-save_safetensors: true
+save_safetensors: truemerge_lora: true
+merge_lora: true
