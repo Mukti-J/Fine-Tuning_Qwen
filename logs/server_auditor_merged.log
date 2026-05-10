@@ -1,0 +1,70 @@
+📦 Loading models/auditor_merged...
+Skipping import of cpp extensions due to incompatible torch version. Please upgrade to torch >= 2.11.0 (found 2.10.0+rocm7.0).
+Loading checkpoint shards:   0%|          | 0/6 [00:00<?, ?it/s]Loading checkpoint shards:   0%|          | 0/6 [00:04<?, ?it/s]
+💥 FATAL CRASH: HIP error: unspecified launch failure
+Search for `hipErrorLaunchFailure' in https://rocm.docs.amd.com/projects/HIP/en/latest/index.html for more information.
+HIP kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing AMD_SERIALIZE_KERNEL=3
+Compile with `TORCH_USE_HIP_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/home/security-ft/code-security-ft/scripts/server.py", line 86, in <module>
+    load_model(model_path)
+  File "/home/security-ft/code-security-ft/scripts/server.py", line 42, in load_model
+    model = AutoModelForCausalLM.from_pretrained(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/transformers/models/auto/auto_factory.py", line 564, in from_pretrained
+    return model_class.from_pretrained(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/transformers/modeling_utils.py", line 4225, in from_pretrained
+    ) = cls._load_pretrained_model(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/transformers/modeling_utils.py", line 4728, in _load_pretrained_model
+    new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
+                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/transformers/modeling_utils.py", line 993, in _load_state_dict_into_meta_model
+    set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/accelerate/utils/modeling.py", line 343, in set_module_tensor_to_device
+    new_value = value.to(device, non_blocking=non_blocking)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.AcceleratorError: HIP error: unspecified launch failure
+Search for `hipErrorLaunchFailure' in https://rocm.docs.amd.com/projects/HIP/en/latest/index.html for more information.
+HIP kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing AMD_SERIALIZE_KERNEL=3
+Compile with `TORCH_USE_HIP_DSA` to enable device-side assertions.
+
+📦 Loading models/auditor_merged...
+Skipping import of cpp extensions due to incompatible torch version. Please upgrade to torch >= 2.11.0 (found 2.10.0+rocm7.0).
+Loading checkpoint shards:   0%|          | 0/6 [00:00<?, ?it/s]Loading checkpoint shards:   0%|          | 0/6 [00:04<?, ?it/s]
+💥 FATAL CRASH: HIP error: unspecified launch failure
+Search for `hipErrorLaunchFailure' in https://rocm.docs.amd.com/projects/HIP/en/latest/index.html for more information.
+HIP kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing AMD_SERIALIZE_KERNEL=3
+Compile with `TORCH_USE_HIP_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "/home/security-ft/code-security-ft/scripts/server.py", line 86, in <module>
+    load_model(model_path)
+  File "/home/security-ft/code-security-ft/scripts/server.py", line 42, in load_model
+    model = AutoModelForCausalLM.from_pretrained(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/transformers/models/auto/auto_factory.py", line 564, in from_pretrained
+    return model_class.from_pretrained(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/transformers/modeling_utils.py", line 4225, in from_pretrained
+    ) = cls._load_pretrained_model(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/transformers/modeling_utils.py", line 4728, in _load_pretrained_model
+    new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
+                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/transformers/modeling_utils.py", line 993, in _load_state_dict_into_meta_model
+    set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
+  File "/home/security-ft/code-security-ft/venv/lib/python3.12/site-packages/accelerate/utils/modeling.py", line 343, in set_module_tensor_to_device
+    new_value = value.to(device, non_blocking=non_blocking)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.AcceleratorError: HIP error: unspecified launch failure
+Search for `hipErrorLaunchFailure' in https://rocm.docs.amd.com/projects/HIP/en/latest/index.html for more information.
+HIP kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing AMD_SERIALIZE_KERNEL=3
+Compile with `TORCH_USE_HIP_DSA` to enable device-side assertions.
+
