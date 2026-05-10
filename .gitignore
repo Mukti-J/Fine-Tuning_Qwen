@@ -4,13 +4,13 @@ env/
 .env
 
 # Mengabaikan file model dan checkpoint
-*.pt
-*.pth
-*.bin
-*.safetensors
-checkpoint-*/
-models/
-runs/
+#*.pt
+#*.pth
+#*.bin
+#*.safetensors
+#checkpoint-*/
+#models/
+#runs/
 
 # Mengabaikan dataset
 *.csv
