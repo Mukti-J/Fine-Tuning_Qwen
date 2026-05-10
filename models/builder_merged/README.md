@@ -57,5 +57,5 @@ export PYTORCH_HIP_ALLOC_CONF=expandable_segments:False
 ###### 🔌 API Integration
 Designed for CI/CD integration. Gunakan response_format={"type":"json_object"} untuk parsing otomatis patch & metadata keamanan.
 
-####### 📜 License & Credits
+###### 📜 License & Credits
 Apache 2.0. Developed for the AMD Developer Hackathon 2026.
